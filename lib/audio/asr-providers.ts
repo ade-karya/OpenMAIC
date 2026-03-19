@@ -263,7 +263,7 @@ async function transcribeQwenASR(
           role: 'user',
           content: [
             {
-              audio: `data:audio/wav;base64,${base64Audio}`,
+              audio: `data:audio/webm;base64,${base64Audio}`,
             },
           ],
         },
@@ -286,7 +286,6 @@ async function transcribeQwenASR(
     headers: {
       Authorization: `Bearer ${config.apiKey}`,
       'Content-Type': 'application/json; charset=utf-8',
-      'X-DashScope-Audio-Format': 'wav',
     },
     body: JSON.stringify(requestBody),
   });
