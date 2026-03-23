@@ -3,7 +3,10 @@ import type { NextRequest } from 'next/server';
 
 export function middleware(request: NextRequest) {
   const isLoggedIn = request.cookies.has('auth_session');
+  const isAdminLoggedIn = request.cookies.has('admin_session');
   const isLoginPage = request.nextUrl.pathname === '/login';
+  const isAdminLoginPage = request.nextUrl.pathname === '/admin/login';
+  const isAdminRoute = request.nextUrl.pathname.startsWith('/admin');
 
   // Allow next static files, images, etc.
   if (
@@ -16,6 +19,18 @@ export function middleware(request: NextRequest) {
     return NextResponse.next();
   }
 
+  // Handle Admin Routes
+  if (isAdminRoute) {
+    if (isAdminLoginPage && isAdminLoggedIn) {
+      return NextResponse.redirect(new URL('/admin/dashboard', request.url));
+    }
+    if (!isAdminLoginPage && !isAdminLoggedIn) {
+      return NextResponse.redirect(new URL('/admin/login', request.url));
+    }
+    return NextResponse.next();
+  }
+
+  // Handle User Routes
   if (!isLoggedIn && !isLoginPage) {
     // Redirect to login if unauthenticated and not already on the login page
     return NextResponse.redirect(new URL('/login', request.url));

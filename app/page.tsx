@@ -48,6 +48,7 @@ import { useDraftCache } from '@/lib/hooks/use-draft-cache';
 import { SpeechButton } from '@/components/audio/speech-button';
 import { useAuthStore } from '@/lib/store/auth';
 import { LogOut } from 'lucide-react';
+import { GuruDashboard } from '@/components/guru/dashboard';
 
 const log = createLogger('Home');
 
@@ -90,6 +91,11 @@ function HomePage() {
 
   // Auth Protection
   const isLoggedIn = useAuthStore((s) => s.isLoggedIn);
+  const role = useAuthStore((s) => s.role);
+
+  const [guruView, setGuruView] = useState<'dashboard'|'ai'>('dashboard');
+
+
 
   // Hydrate client-only state after mount (avoids SSR mismatch)
   /* eslint-disable react-hooks/set-state-in-effect -- Hydration from localStorage must happen in effect */
@@ -327,6 +333,10 @@ function HomePage() {
     }
   };
 
+  if (storeHydrated && isLoggedIn && role === 'guru' && guruView === 'dashboard') {
+    return <GuruDashboard onEnterAi={() => setGuruView('ai')} />;
+  }
+
   return (
     <div className="min-h-[100dvh] w-full bg-gradient-to-b from-slate-50 to-slate-100 dark:from-slate-950 dark:to-slate-900 flex flex-col items-center p-4 pt-16 md:p-8 md:pt-16 overflow-x-hidden">
       {/* ═══ Top-right pill (unchanged) ═══ */}
@@ -334,6 +344,21 @@ function HomePage() {
         ref={toolbarRef}
         className="fixed top-4 right-4 z-50 flex items-center gap-1 bg-white/60 dark:bg-gray-800/60 backdrop-blur-md px-2 py-1.5 rounded-full border border-gray-100/50 dark:border-gray-700/50 shadow-sm"
       >
+        {/* Back to Dashboard Button for Guru */}
+        {role === 'guru' && guruView === 'ai' && (
+          <>
+            <div className="relative">
+              <button
+                onClick={() => setGuruView('dashboard')}
+                className="flex items-center gap-1 px-3 py-1.5 rounded-full text-xs font-bold text-violet-600 bg-violet-100 hover:bg-violet-200 transition-all shadow-sm"
+              >
+                Kembali ke Dashboard
+              </button>
+            </div>
+            <div className="w-[1px] h-4 bg-gray-200 dark:bg-gray-700" />
+          </>
+        )}
+
         {/* Language Selector */}
         <div className="relative">
           <button
@@ -726,7 +751,7 @@ function GreetingBar() {
   const setNickname = useUserProfileStore((s) => s.setNickname);
   const setBio = useUserProfileStore((s) => s.setBio);
 
-  const authNisn = useAuthStore((s) => s.nisn);
+  const authUserId = useAuthStore((s) => s.userId);
   const logout = useAuthStore((s) => s.logout);
 
   const [open, setOpen] = useState(false);
@@ -927,8 +952,8 @@ function GreetingBar() {
                       <Pencil className="size-2.5 text-muted-foreground/30 opacity-0 group-hover/name:opacity-100 transition-opacity" />
                     </span>
                   )}
-                  {authNisn && (
-                    <div className="text-[11px] text-muted-foreground/50 mt-0.5">NISN: {authNisn}</div>
+                  {authUserId && (
+                    <div className="text-[11px] text-muted-foreground/50 mt-0.5">ID: {authUserId}</div>
                   )}
                 </div>
 
