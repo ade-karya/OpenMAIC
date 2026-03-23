@@ -325,6 +325,22 @@ export const PROVIDERS: Record<ProviderId, ProviderConfig> = {
         },
       },
       {
+        id: 'gemini-3.1-flash-lite-preview',
+        name: 'Gemini 3.1 Flash-Lite Preview',
+        contextWindow: 1048576,
+        outputWindow: 65536,
+        capabilities: {
+          streaming: true,
+          tools: true,
+          vision: true,
+          thinking: {
+            toggleable: false,
+            budgetAdjustable: true,
+            defaultEnabled: true,
+          },
+        },
+      },
+      {
         id: 'gemini-3-pro-preview',
         name: 'Gemini 3 Pro Preview',
         contextWindow: 1048576,
