@@ -141,6 +141,7 @@ const IMAGE_PROVIDER_NAMES: Record<ImageProviderId, string> = {
   'qwen-image': 'providerQwenImage',
   'nano-banana': 'providerNanoBanana',
   'grok-image': 'providerGrokImage',
+  'openrouter-image': 'providerOpenRouterImage',
 };
 
 const IMAGE_PROVIDER_ICONS: Record<ImageProviderId, string> = {
@@ -148,6 +149,7 @@ const IMAGE_PROVIDER_ICONS: Record<ImageProviderId, string> = {
   'qwen-image': '/logos/bailian.svg',
   'nano-banana': '/logos/gemini.svg',
   'grok-image': '/logos/grok.svg',
+  'openrouter-image': '/logos/openrouter.svg',
 };
 
 const VIDEO_PROVIDER_NAMES: Record<VideoProviderId, string> = {
