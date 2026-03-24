@@ -71,3 +71,6 @@ next-env.d.ts
 
 # docs
 /docs
+tsconfig.json
+build_output.log
+tsconfig.json
