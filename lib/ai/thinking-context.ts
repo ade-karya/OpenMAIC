@@ -20,4 +20,5 @@ export const thinkingContext = new AsyncLocalStorage<ThinkingConfig | undefined>
 // Expose on globalThis so providers.ts can access the store without
 // importing this module (which would pull node:async_hooks into the
 // client bundle via the settings.ts → providers.ts import chain).
-(globalThis as Record<string, unknown>).__thinkingContext = thinkingContext;
+const globalRecord = globalThis as Record<string, unknown>;
+globalRecord.__thinkingContext = thinkingContext;

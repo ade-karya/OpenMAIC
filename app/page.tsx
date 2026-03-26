@@ -32,6 +32,7 @@ import { nanoid } from 'nanoid';
 import { storePdfBlob } from '@/lib/utils/image-storage';
 import type { UserRequirements } from '@/lib/types/generation';
 import { useSettingsStore } from '@/lib/store/settings';
+import { useAuthStore } from '@/lib/store/auth';
 import { useUserProfileStore, AVATAR_OPTIONS } from '@/lib/store/user-profile';
 import {
   StageListItem,
@@ -80,6 +81,9 @@ function HomePage() {
   // Draft cache for requirement text
   const { cachedValue: cachedRequirement, updateCache: updateRequirementCache } =
     useDraftCache<string>({ key: 'requirementDraft' });
+
+  // PIN Auth
+  const { isAuthenticated, pinEnabled, user, logout } = useAuthStore();
 
   // Model setup state
   const currentModelId = useSettingsStore((s) => s.modelId);
@@ -445,17 +449,26 @@ function HomePage() {
           )}
         </div>
 
-        <div className="w-[1px] h-4 bg-gray-200 dark:bg-gray-700" />
-
-        {/* Settings Button */}
-        <div className="relative">
-          <button
-            onClick={() => setSettingsOpen(true)}
-            className="p-2 rounded-full text-gray-400 dark:text-gray-500 hover:bg-white dark:hover:bg-gray-700 hover:text-gray-800 dark:hover:text-gray-200 hover:shadow-sm transition-all group"
-          >
-            <Settings className="w-4 h-4 group-hover:rotate-90 transition-transform duration-500" />
-          </button>
-        </div>
+        {/* PIN Logout Button */}
+        {pinEnabled && isAuthenticated && (
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <button
+                onClick={async () => {
+                  await logout();
+                  // Force a hard reload to reset all states securely
+                  window.location.href = '/';
+                }}
+                className={cn(
+                  'flex items-center justify-center size-[34px] rounded-lg transition-colors bg-white/50 dark:bg-slate-800/50 hover:bg-red-50 dark:hover:bg-red-900/20 text-slate-500 hover:text-red-500',
+                )}
+              >
+                <BotOff className="w-4 h-4" />
+              </button>
+            </TooltipTrigger>
+            <TooltipContent align="end">{`Logout (${user?.name})`}</TooltipContent>
+          </Tooltip>
+        )}
       </div>
       <SettingsDialog
         open={settingsOpen}

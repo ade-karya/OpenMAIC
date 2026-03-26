@@ -3,12 +3,15 @@
  *
  * Loads provider configs from YAML (primary) + environment variables (fallback).
  * Keys never leave the server — only provider IDs and metadata are exposed via API.
+ *
+ * When a PIN token is provided, per-PIN API keys/base URLs take priority.
  */
 
 import fs from 'fs';
 import path from 'path';
 import yaml from 'js-yaml';
 import { createLogger } from '@/lib/logger';
+import { getPinServiceConfig, type PinServiceType } from '@/lib/server/pin-auth';
 
 const log = createLogger('ServerProviderConfig');
 
@@ -239,15 +242,23 @@ export function getServerProviders(): Record<string, { models?: string[]; baseUr
   return result;
 }
 
-/** Resolve API key: client key > server key > empty string */
-export function resolveApiKey(providerId: string, clientKey?: string): string {
+/** Resolve API key: client key > PIN key > server key > empty string */
+export function resolveApiKey(providerId: string, clientKey?: string, pinToken?: string): string {
   if (clientKey) return clientKey;
+  if (pinToken) {
+    const pinCfg = getPinServiceConfig(pinToken, 'llm');
+    if (pinCfg?.apiKey) return pinCfg.apiKey;
+  }
   return getConfig().providers[providerId]?.apiKey || '';
 }
 
-/** Resolve base URL: client > server > undefined */
-export function resolveBaseUrl(providerId: string, clientBaseUrl?: string): string | undefined {
+/** Resolve base URL: client > PIN > server > undefined */
+export function resolveBaseUrl(providerId: string, clientBaseUrl?: string, pinToken?: string): string | undefined {
   if (clientBaseUrl) return clientBaseUrl;
+  if (pinToken) {
+    const pinCfg = getPinServiceConfig(pinToken, 'llm');
+    if (pinCfg?.baseUrl) return pinCfg.baseUrl;
+  }
   return getConfig().providers[providerId]?.baseUrl;
 }
 
@@ -270,13 +281,21 @@ export function getServerTTSProviders(): Record<string, { baseUrl?: string }> {
   return result;
 }
 
-export function resolveTTSApiKey(providerId: string, clientKey?: string): string {
+export function resolveTTSApiKey(providerId: string, clientKey?: string, pinToken?: string): string {
   if (clientKey) return clientKey;
+  if (pinToken) {
+    const pinCfg = getPinServiceConfig(pinToken, 'tts');
+    if (pinCfg?.apiKey) return pinCfg.apiKey;
+  }
   return getConfig().tts[providerId]?.apiKey || '';
 }
 
-export function resolveTTSBaseUrl(providerId: string, clientBaseUrl?: string): string | undefined {
+export function resolveTTSBaseUrl(providerId: string, clientBaseUrl?: string, pinToken?: string): string | undefined {
   if (clientBaseUrl) return clientBaseUrl;
+  if (pinToken) {
+    const pinCfg = getPinServiceConfig(pinToken, 'tts');
+    if (pinCfg?.baseUrl) return pinCfg.baseUrl;
+  }
   return getConfig().tts[providerId]?.baseUrl;
 }
 
@@ -294,13 +313,21 @@ export function getServerASRProviders(): Record<string, { baseUrl?: string }> {
   return result;
 }
 
-export function resolveASRApiKey(providerId: string, clientKey?: string): string {
+export function resolveASRApiKey(providerId: string, clientKey?: string, pinToken?: string): string {
   if (clientKey) return clientKey;
+  if (pinToken) {
+    const pinCfg = getPinServiceConfig(pinToken, 'asr');
+    if (pinCfg?.apiKey) return pinCfg.apiKey;
+  }
   return getConfig().asr[providerId]?.apiKey || '';
 }
 
-export function resolveASRBaseUrl(providerId: string, clientBaseUrl?: string): string | undefined {
+export function resolveASRBaseUrl(providerId: string, clientBaseUrl?: string, pinToken?: string): string | undefined {
   if (clientBaseUrl) return clientBaseUrl;
+  if (pinToken) {
+    const pinCfg = getPinServiceConfig(pinToken, 'asr');
+    if (pinCfg?.baseUrl) return pinCfg.baseUrl;
+  }
   return getConfig().asr[providerId]?.baseUrl;
 }
 
@@ -318,12 +345,12 @@ export function getServerPDFProviders(): Record<string, { baseUrl?: string }> {
   return result;
 }
 
-export function resolvePDFApiKey(providerId: string, clientKey?: string): string {
+export function resolvePDFApiKey(providerId: string, clientKey?: string, pinToken?: string): string {
   if (clientKey) return clientKey;
   return getConfig().pdf[providerId]?.apiKey || '';
 }
 
-export function resolvePDFBaseUrl(providerId: string, clientBaseUrl?: string): string | undefined {
+export function resolvePDFBaseUrl(providerId: string, clientBaseUrl?: string, pinToken?: string): string | undefined {
   if (clientBaseUrl) return clientBaseUrl;
   return getConfig().pdf[providerId]?.baseUrl;
 }
@@ -341,16 +368,25 @@ export function getServerImageProviders(): Record<string, Record<string, never>>
   return result;
 }
 
-export function resolveImageApiKey(providerId: string, clientKey?: string): string {
+export function resolveImageApiKey(providerId: string, clientKey?: string, pinToken?: string): string {
   if (clientKey) return clientKey;
+  if (pinToken) {
+    const pinCfg = getPinServiceConfig(pinToken, 'image');
+    if (pinCfg?.apiKey) return pinCfg.apiKey;
+  }
   return getConfig().image[providerId]?.apiKey || '';
 }
 
 export function resolveImageBaseUrl(
   providerId: string,
   clientBaseUrl?: string,
+  pinToken?: string,
 ): string | undefined {
   if (clientBaseUrl) return clientBaseUrl;
+  if (pinToken) {
+    const pinCfg = getPinServiceConfig(pinToken, 'image');
+    if (pinCfg?.baseUrl) return pinCfg.baseUrl;
+  }
   return getConfig().image[providerId]?.baseUrl;
 }
 
@@ -367,16 +403,25 @@ export function getServerVideoProviders(): Record<string, Record<string, never>>
   return result;
 }
 
-export function resolveVideoApiKey(providerId: string, clientKey?: string): string {
+export function resolveVideoApiKey(providerId: string, clientKey?: string, pinToken?: string): string {
   if (clientKey) return clientKey;
+  if (pinToken) {
+    const pinCfg = getPinServiceConfig(pinToken, 'video');
+    if (pinCfg?.apiKey) return pinCfg.apiKey;
+  }
   return getConfig().video[providerId]?.apiKey || '';
 }
 
 export function resolveVideoBaseUrl(
   providerId: string,
   clientBaseUrl?: string,
+  pinToken?: string,
 ): string | undefined {
   if (clientBaseUrl) return clientBaseUrl;
+  if (pinToken) {
+    const pinCfg = getPinServiceConfig(pinToken, 'video');
+    if (pinCfg?.baseUrl) return pinCfg.baseUrl;
+  }
   return getConfig().video[providerId]?.baseUrl;
 }
 
@@ -395,9 +440,13 @@ export function getServerWebSearchProviders(): Record<string, { baseUrl?: string
   return result;
 }
 
-/** Resolve Tavily API key: client key > server key > TAVILY_API_KEY env > empty */
-export function resolveWebSearchApiKey(clientKey?: string): string {
+/** Resolve web search API key: client key > PIN key > server key > TAVILY_API_KEY env > empty */
+export function resolveWebSearchApiKey(clientKey?: string, pinToken?: string): string {
   if (clientKey) return clientKey;
+  if (pinToken) {
+    const pinCfg = getPinServiceConfig(pinToken, 'web_search');
+    if (pinCfg?.apiKey) return pinCfg.apiKey;
+  }
   const serverKey = getConfig().webSearch.tavily?.apiKey;
   if (serverKey) return serverKey;
   return process.env.TAVILY_API_KEY || '';

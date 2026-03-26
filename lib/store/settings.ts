@@ -734,6 +734,7 @@ export const useSettingsStore = create<SettingsState>()(
               image: Record<string, { baseUrl?: string }>;
               video: Record<string, { baseUrl?: string }>;
               webSearch: Record<string, { baseUrl?: string }>;
+              pinUser?: Record<string, { provider: string; model?: string; hasApiKey: boolean; baseUrl?: string }>;
             };
 
             set((state) => {
@@ -909,6 +910,71 @@ export const useSettingsStore = create<SettingsState>()(
                 }
               }
 
+              // Merge PIN user configurations (if authenticated)
+              let pinLlmProvider: ProviderId | undefined;
+              let pinImageProvider: ImageProviderId | undefined;
+              let pinVideoProvider: VideoProviderId | undefined;
+              let pinTtsProvider: TTSProviderId | undefined;
+              let pinAsrProvider: ASRProviderId | undefined;
+              let pinWebSearchProvider: WebSearchProviderId | undefined;
+
+              if (data.pinUser) {
+                // LLM
+                if (data.pinUser.llm?.provider && data.pinUser.llm.hasApiKey) {
+                  const pid = data.pinUser.llm.provider as ProviderId;
+                  if (newProvidersConfig[pid]) {
+                    newProvidersConfig[pid].isServerConfigured = true;
+                    if (data.pinUser.llm.baseUrl) newProvidersConfig[pid].serverBaseUrl = data.pinUser.llm.baseUrl;
+                    pinLlmProvider = pid;
+                  }
+                }
+                // Image
+                if (data.pinUser.image?.provider && data.pinUser.image.hasApiKey) {
+                  const pid = data.pinUser.image.provider as ImageProviderId;
+                  if (newImageConfig[pid]) {
+                    newImageConfig[pid].isServerConfigured = true;
+                    if (data.pinUser.image.baseUrl) newImageConfig[pid].serverBaseUrl = data.pinUser.image.baseUrl;
+                    pinImageProvider = pid;
+                  }
+                }
+                // Video
+                if (data.pinUser.video?.provider && data.pinUser.video.hasApiKey) {
+                  const pid = data.pinUser.video.provider as VideoProviderId;
+                  if (newVideoConfig[pid]) {
+                    newVideoConfig[pid].isServerConfigured = true;
+                    if (data.pinUser.video.baseUrl) newVideoConfig[pid].serverBaseUrl = data.pinUser.video.baseUrl;
+                    pinVideoProvider = pid;
+                  }
+                }
+                // TTS
+                if (data.pinUser.tts?.provider && data.pinUser.tts.hasApiKey) {
+                  const pid = data.pinUser.tts.provider as TTSProviderId;
+                  if (newTTSConfig[pid]) {
+                    newTTSConfig[pid].isServerConfigured = true;
+                    if (data.pinUser.tts.baseUrl) newTTSConfig[pid].serverBaseUrl = data.pinUser.tts.baseUrl;
+                    pinTtsProvider = pid;
+                  }
+                }
+                // ASR
+                if (data.pinUser.asr?.provider && data.pinUser.asr.hasApiKey) {
+                  const pid = data.pinUser.asr.provider as ASRProviderId;
+                  if (newASRConfig[pid]) {
+                    newASRConfig[pid].isServerConfigured = true;
+                    if (data.pinUser.asr.baseUrl) newASRConfig[pid].serverBaseUrl = data.pinUser.asr.baseUrl;
+                    pinAsrProvider = pid;
+                  }
+                }
+                // Web Search
+                if (data.pinUser.webSearch?.provider && data.pinUser.webSearch.hasApiKey) {
+                  const pid = data.pinUser.webSearch.provider as WebSearchProviderId;
+                  if (newWebSearchConfig[pid]) {
+                    newWebSearchConfig[pid].isServerConfigured = true;
+                    if (data.pinUser.webSearch.baseUrl) newWebSearchConfig[pid].serverBaseUrl = data.pinUser.webSearch.baseUrl;
+                    pinWebSearchProvider = pid;
+                  }
+                }
+              }
+
               // === Validate current selections against updated configs ===
               // Build fallback: server-configured first, then client-key-only
               const buildFallback = <T extends string>(
@@ -1023,10 +1089,7 @@ export const useSettingsStore = create<SettingsState>()(
               let autoVideoEnabled: boolean | undefined;
 
               if (!state.autoConfigApplied) {
-                // PDF: unpdf → mineru if server has it
-                if (newPDFConfig.mineru?.isServerConfigured && state.pdfProviderId === 'unpdf') {
-                  autoPdfProvider = 'mineru' as PDFProviderId;
-                }
+
 
                 // TTS: select first server provider if current is not server-configured
                 const serverTtsIds = Object.keys(data.tts) as TTSProviderId[];
@@ -1106,58 +1169,61 @@ export const useSettingsStore = create<SettingsState>()(
                 webSearchProvidersConfig: newWebSearchConfig,
                 autoConfigApplied: true,
                 // Validated selections
-                ...(validLLMProvider !== state.providerId && {
-                  providerId: validLLMProvider as ProviderId,
+                ...((pinLlmProvider || validLLMProvider) !== state.providerId && {
+                  providerId: (pinLlmProvider || validLLMProvider) as ProviderId,
                 }),
                 ...(validLLMModel !== state.modelId && { modelId: validLLMModel }),
-                ...(validTTSProvider !== state.ttsProviderId && {
-                  ttsProviderId: validTTSProvider as TTSProviderId,
+                ...((pinTtsProvider || validTTSProvider) !== state.ttsProviderId && {
+                  ttsProviderId: (pinTtsProvider || validTTSProvider) as TTSProviderId,
                   ttsVoice: validTTSVoice,
                 }),
-                ...(validASRProvider !== state.asrProviderId && {
-                  asrProviderId: validASRProvider as ASRProviderId,
+                ...((pinAsrProvider || validASRProvider) !== state.asrProviderId && {
+                  asrProviderId: (pinAsrProvider || validASRProvider) as ASRProviderId,
                 }),
                 ...(validPDFProvider !== state.pdfProviderId && {
                   pdfProviderId: validPDFProvider as PDFProviderId,
                 }),
-                ...(validImageProvider !== state.imageProviderId && {
-                  imageProviderId: validImageProvider as ImageProviderId,
+                ...((pinImageProvider || validImageProvider) !== state.imageProviderId && {
+                  imageProviderId: (pinImageProvider || validImageProvider) as ImageProviderId,
                 }),
                 ...(validImageModel !== state.imageModelId && {
                   imageModelId: validImageModel,
                 }),
-                ...(validVideoProvider !== state.videoProviderId && {
-                  videoProviderId: validVideoProvider as VideoProviderId,
+                ...((pinVideoProvider || validVideoProvider) !== state.videoProviderId && {
+                  videoProviderId: (pinVideoProvider || validVideoProvider) as VideoProviderId,
                 }),
                 ...(validVideoModel !== state.videoModelId && {
                   videoModelId: validVideoModel,
                 }),
-                ...(shouldDisableImage && { imageGenerationEnabled: false }),
-                ...(shouldDisableVideo && { videoGenerationEnabled: false }),
+                ...(pinWebSearchProvider && state.webSearchProviderId !== pinWebSearchProvider && {
+                  webSearchProviderId: pinWebSearchProvider as WebSearchProviderId,
+                }),
+                ...(shouldDisableImage && !pinImageProvider && { imageGenerationEnabled: false }),
+                ...(shouldDisableVideo && !pinVideoProvider && { videoGenerationEnabled: false }),
                 // First-run auto-select overrides validation (autoConfigApplied guard).
                 // On first sync, auto-select picks the best provider. On subsequent syncs,
                 // auto* variables stay undefined so only validation spreads take effect.
                 ...(autoPdfProvider && { pdfProviderId: autoPdfProvider }),
-                ...(autoTtsProvider && {
+                ...(autoTtsProvider && !pinTtsProvider && {
                   ttsProviderId: autoTtsProvider,
                   ttsVoice: autoTtsVoice,
                 }),
-                ...(autoAsrProvider && { asrProviderId: autoAsrProvider }),
-                ...(autoImageProvider && {
+                ...(autoAsrProvider && !pinAsrProvider && { asrProviderId: autoAsrProvider }),
+                ...(autoImageProvider && !pinImageProvider && {
                   imageProviderId: autoImageProvider,
                 }),
                 ...(autoImageModel && { imageModelId: autoImageModel }),
-                ...(autoVideoProvider && {
+                ...(autoVideoProvider && !pinVideoProvider && {
                   videoProviderId: autoVideoProvider,
                 }),
                 ...(autoVideoModel && { videoModelId: autoVideoModel }),
-                ...(autoImageEnabled !== undefined && {
-                  imageGenerationEnabled: autoImageEnabled,
+                ...((autoImageEnabled !== undefined || pinImageProvider) && {
+                  imageGenerationEnabled: autoImageEnabled ?? true,
                 }),
-                ...(autoVideoEnabled !== undefined && {
-                  videoGenerationEnabled: autoVideoEnabled,
+                ...((autoVideoEnabled !== undefined || pinVideoProvider) && {
+                  videoGenerationEnabled: autoVideoEnabled ?? true,
                 }),
-                ...(autoProviderId && { providerId: autoProviderId }),
+                ...(autoProviderId && !pinLlmProvider && { providerId: autoProviderId }),
                 ...(autoModelId && { modelId: autoModelId }),
               };
             });
@@ -1226,10 +1292,12 @@ export const useSettingsStore = create<SettingsState>()(
           Object.assign(state, defaultVideoConfig);
         }
 
+        const stateRecord = state as Record<string, unknown>;
+
         // v1 → v2: Replace deep research with web search
         if (version < 2) {
-          delete (state as Record<string, unknown>).deepResearchProviderId;
-          delete (state as Record<string, unknown>).deepResearchProvidersConfig;
+          delete stateRecord.deepResearchProviderId;
+          delete stateRecord.deepResearchProvidersConfig;
         }
 
         // Add default media generation toggles if missing
@@ -1241,28 +1309,27 @@ export const useSettingsStore = create<SettingsState>()(
         }
 
         // Add default audio toggles if missing
-        if ((state as Record<string, unknown>).ttsEnabled === undefined) {
-          (state as Record<string, unknown>).ttsEnabled = true;
+        if (stateRecord.ttsEnabled === undefined) {
+          stateRecord.ttsEnabled = true;
         }
-        if ((state as Record<string, unknown>).asrEnabled === undefined) {
-          (state as Record<string, unknown>).asrEnabled = true;
+        if (stateRecord.asrEnabled === undefined) {
+          stateRecord.asrEnabled = true;
         }
 
         // Existing users already have their config set up — mark auto-config as done
-        if ((state as Record<string, unknown>).autoConfigApplied === undefined) {
-          (state as Record<string, unknown>).autoConfigApplied = true;
+        if (stateRecord.autoConfigApplied === undefined) {
+          stateRecord.autoConfigApplied = true;
         }
 
-        if ((state as Record<string, unknown>).agentMode === undefined) {
-          (state as Record<string, unknown>).agentMode = 'preset';
+        if (stateRecord.agentMode === undefined) {
+          stateRecord.agentMode = 'preset';
         }
-        if ((state as Record<string, unknown>).autoAgentCount === undefined) {
-          (state as Record<string, unknown>).autoAgentCount = 3;
+        if (stateRecord.autoAgentCount === undefined) {
+          stateRecord.autoAgentCount = 3;
         }
 
         // Migrate Web Search: old flat fields → new provider-based config
         if (!state.webSearchProvidersConfig) {
-          const stateRecord = state as Record<string, unknown>;
           const oldApiKey = (stateRecord.webSearchApiKey as string) || '';
           const oldIsServerConfigured =
             (stateRecord.webSearchIsServerConfigured as boolean) || false;

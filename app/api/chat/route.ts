@@ -19,6 +19,7 @@ import type { ThinkingConfig } from '@/lib/types/provider';
 import { apiError } from '@/lib/server/api-response';
 import { createLogger } from '@/lib/logger';
 import { resolveModel } from '@/lib/server/resolve-model';
+import { getPinTokenFromRequest } from '@/lib/server/pin-auth';
 const log = createLogger('Chat API');
 
 // Allow streaming responses up to 60 seconds
@@ -59,12 +60,16 @@ export async function POST(req: NextRequest) {
       return apiError('MISSING_REQUIRED_FIELD', 400, 'Missing required field: config.agentIds');
     }
 
+    // Read PIN token from session cookie
+    const pinToken = getPinTokenFromRequest(req) || undefined;
+
     const { model: languageModel, apiKey: resolvedApiKey } = resolveModel({
       modelString: body.model,
       apiKey: body.apiKey,
       baseUrl: body.baseUrl,
       providerType: body.providerType,
       requiresApiKey: body.requiresApiKey,
+      pinToken,
     });
 
     if (!resolvedApiKey && body.requiresApiKey !== false) {

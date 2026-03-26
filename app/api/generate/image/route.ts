@@ -22,6 +22,7 @@ import type { ImageProviderId, ImageGenerationOptions } from '@/lib/media/types'
 import { createLogger } from '@/lib/logger';
 import { apiError, apiSuccess } from '@/lib/server/api-response';
 import { validateUrlForSSRF } from '@/lib/server/ssrf-guard';
+import { getPinTokenFromRequest } from '@/lib/server/pin-auth';
 
 const log = createLogger('ImageGeneration API');
 
@@ -47,9 +48,11 @@ export async function POST(request: NextRequest) {
       }
     }
 
+    const pinToken = getPinTokenFromRequest(request) || undefined;
+
     const apiKey = clientBaseUrl
       ? clientApiKey || ''
-      : resolveImageApiKey(providerId, clientApiKey);
+      : resolveImageApiKey(providerId, clientApiKey, pinToken);
     if (!apiKey) {
       return apiError(
         'MISSING_API_KEY',
@@ -58,7 +61,7 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    const baseUrl = clientBaseUrl ? clientBaseUrl : resolveImageBaseUrl(providerId, clientBaseUrl);
+    const baseUrl = clientBaseUrl ? clientBaseUrl : resolveImageBaseUrl(providerId, clientBaseUrl, pinToken);
 
     // Resolve dimensions from aspect ratio if not explicitly set
     if (!body.width && !body.height && body.aspectRatio) {

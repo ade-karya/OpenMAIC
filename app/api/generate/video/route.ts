@@ -23,6 +23,7 @@ import type { VideoProviderId, VideoGenerationOptions } from '@/lib/media/types'
 import { createLogger } from '@/lib/logger';
 import { apiError, apiSuccess } from '@/lib/server/api-response';
 import { validateUrlForSSRF } from '@/lib/server/ssrf-guard';
+import { getPinTokenFromRequest } from '@/lib/server/pin-auth';
 
 const log = createLogger('VideoGeneration API');
 
@@ -48,9 +49,11 @@ export async function POST(request: NextRequest) {
       }
     }
 
+    const pinToken = getPinTokenFromRequest(request) || undefined;
+
     const apiKey = clientBaseUrl
       ? clientApiKey || ''
-      : resolveVideoApiKey(providerId, clientApiKey);
+      : resolveVideoApiKey(providerId, clientApiKey, pinToken);
     if (!apiKey) {
       return apiError(
         'MISSING_API_KEY',
@@ -59,7 +62,7 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    const baseUrl = clientBaseUrl ? clientBaseUrl : resolveVideoBaseUrl(providerId, clientBaseUrl);
+    const baseUrl = clientBaseUrl ? clientBaseUrl : resolveVideoBaseUrl(providerId, clientBaseUrl, pinToken);
 
     // Normalize options against provider capabilities
     const options = normalizeVideoOptions(providerId, body);

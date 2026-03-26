@@ -9,11 +9,16 @@ import {
 } from '@/lib/server/provider-config';
 import { apiError, apiSuccess } from '@/lib/server/api-response';
 import { createLogger } from '@/lib/logger';
+import { getPinTokenFromRequest, getPinUserServicesPublic } from '@/lib/server/pin-auth';
+import { NextRequest } from 'next/server';
 
 const log = createLogger('ServerProviders');
 
-export async function GET() {
+export async function GET(req: NextRequest) {
   try {
+    const pinToken = getPinTokenFromRequest(req) || undefined;
+    const pinServices = pinToken ? getPinUserServicesPublic(pinToken) : null;
+
     return apiSuccess({
       providers: getServerProviders(),
       tts: getServerTTSProviders(),
@@ -22,6 +27,7 @@ export async function GET() {
       image: getServerImageProviders(),
       video: getServerVideoProviders(),
       webSearch: getServerWebSearchProviders(),
+      ...(pinServices ? { pinUser: pinServices } : {}),
     });
   } catch (error) {
     log.error('Error fetching server providers:', error);

@@ -5,6 +5,7 @@ import type { ASRProviderId } from '@/lib/audio/types';
 import { createLogger } from '@/lib/logger';
 import { apiError, apiSuccess } from '@/lib/server/api-response';
 import { validateUrlForSSRF } from '@/lib/server/ssrf-guard';
+import { getPinTokenFromRequest } from '@/lib/server/pin-auth';
 const log = createLogger('Transcription');
 
 export const maxDuration = 60;
@@ -33,15 +34,17 @@ export async function POST(req: NextRequest) {
       }
     }
 
+    const pinToken = getPinTokenFromRequest(req) || undefined;
+
     const config = {
       providerId: effectiveProviderId,
       language: language || 'auto',
       apiKey: clientBaseUrl
         ? apiKey || ''
-        : resolveASRApiKey(effectiveProviderId, apiKey || undefined),
+        : resolveASRApiKey(effectiveProviderId, apiKey || undefined, pinToken),
       baseUrl: clientBaseUrl
         ? clientBaseUrl
-        : resolveASRBaseUrl(effectiveProviderId, baseUrl || undefined),
+        : resolveASRBaseUrl(effectiveProviderId, baseUrl || undefined, pinToken),
     };
 
     // Convert audio file to buffer

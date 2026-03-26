@@ -14,6 +14,7 @@ import type { TTSProviderId } from '@/lib/audio/types';
 import { createLogger } from '@/lib/logger';
 import { apiError, apiSuccess } from '@/lib/server/api-response';
 import { validateUrlForSSRF } from '@/lib/server/ssrf-guard';
+import { getPinTokenFromRequest } from '@/lib/server/pin-auth';
 
 const log = createLogger('TTS API');
 
@@ -54,12 +55,14 @@ export async function POST(req: NextRequest) {
       }
     }
 
+    const pinToken = getPinTokenFromRequest(req) || undefined;
+
     const apiKey = clientBaseUrl
       ? ttsApiKey || ''
-      : resolveTTSApiKey(ttsProviderId, ttsApiKey || undefined);
+      : resolveTTSApiKey(ttsProviderId, ttsApiKey || undefined, pinToken);
     const baseUrl = clientBaseUrl
       ? clientBaseUrl
-      : resolveTTSBaseUrl(ttsProviderId, ttsBaseUrl || undefined);
+      : resolveTTSBaseUrl(ttsProviderId, ttsBaseUrl || undefined, pinToken);
 
     // Build TTS config
     const config = {

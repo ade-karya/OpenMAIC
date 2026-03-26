@@ -9,6 +9,7 @@ import { searchWithTavily, formatSearchResultsAsContext } from '@/lib/web-search
 import { resolveWebSearchApiKey } from '@/lib/server/provider-config';
 import { createLogger } from '@/lib/logger';
 import { apiError, apiSuccess } from '@/lib/server/api-response';
+import { getPinTokenFromRequest } from '@/lib/server/pin-auth';
 
 const log = createLogger('WebSearch');
 
@@ -24,7 +25,8 @@ export async function POST(req: Request) {
       return apiError('MISSING_REQUIRED_FIELD', 400, 'query is required');
     }
 
-    const apiKey = resolveWebSearchApiKey(clientApiKey);
+    const pinToken = getPinTokenFromRequest(req) || undefined;
+    const apiKey = resolveWebSearchApiKey(clientApiKey, pinToken);
     if (!apiKey) {
       return apiError(
         'MISSING_API_KEY',
