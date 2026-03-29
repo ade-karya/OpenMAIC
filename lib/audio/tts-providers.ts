@@ -449,7 +449,7 @@ async function generateDoubaoTTS(
       'X-Api-Resource-Id': 'seed-tts-2.0',
     },
     body: JSON.stringify({
-      user: { uid: 'openmaic' },
+      user: { uid: 'kelaska' },
       req_params: {
         text,
         speaker: config.voice,
