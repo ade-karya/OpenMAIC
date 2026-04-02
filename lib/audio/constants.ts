@@ -1045,7 +1045,7 @@ export const ASR_PROVIDERS: Record<ASRProviderId, ASRProviderConfig> = {
 
   'browser-native': {
     id: 'browser-native',
-    name: '浏览器原生 ASR (Web Speech API)',
+    name: 'ASR (Web Speech API)',
     requiresApiKey: false,
     icon: '/logos/browser.svg',
     models: [],
