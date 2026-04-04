@@ -10,12 +10,14 @@ import { useSceneGenerator } from '@/lib/hooks/use-scene-generator';
 import { useMediaGenerationStore } from '@/lib/store/media-generation';
 import { useWhiteboardHistoryStore } from '@/lib/store/whiteboard-history';
 import { createLogger } from '@/lib/logger';
+import { useI18n } from '@/lib/hooks/use-i18n';
 import { MediaStageProvider } from '@/lib/contexts/media-stage-context';
 import { generateMediaForOutlines } from '@/lib/media/media-orchestrator';
 
 const log = createLogger('Classroom');
 
 export default function ClassroomDetailPage() {
+  const { t } = useI18n();
   const params = useParams();
   const classroomId = params?.id as string;
 
@@ -182,24 +184,25 @@ export default function ClassroomDetailPage() {
       <MediaStageProvider value={classroomId}>
         <div className="h-screen flex flex-col overflow-hidden">
           {loading ? (
-            <div className="flex-1 flex items-center justify-center bg-gray-50 dark:bg-gray-900">
-              <div className="text-center text-muted-foreground">
-                <p>Loading classroom...</p>
+            <div className="flex-1 flex items-center justify-center bg-gradient-to-b from-slate-50 to-slate-100 dark:from-slate-950 dark:to-slate-900">
+              <div className="text-center text-muted-foreground space-y-3">
+                <div className="size-8 border-2 border-current border-t-transparent rounded-full animate-spin mx-auto" />
+                <p className="text-sm">{t('common.loading')}</p>
               </div>
             </div>
           ) : error ? (
-            <div className="flex-1 flex items-center justify-center bg-gray-50 dark:bg-gray-900">
-              <div className="text-center">
-                <p className="text-destructive mb-4">Error: {error}</p>
+            <div className="flex-1 flex items-center justify-center bg-gradient-to-b from-slate-50 to-slate-100 dark:from-slate-950 dark:to-slate-900">
+              <div className="text-center space-y-4">
+                <p className="text-destructive text-sm">{error}</p>
                 <button
                   onClick={() => {
                     setError(null);
                     setLoading(true);
                     loadClassroom();
                   }}
-                  className="px-4 py-2 bg-primary text-primary-foreground rounded-md hover:bg-primary/90"
+                  className="px-5 py-2 bg-primary text-primary-foreground rounded-lg hover:bg-primary/90 text-sm font-medium transition-colors"
                 >
-                  Retry
+                  {t('generation.retryScene')}
                 </button>
               </div>
             </div>

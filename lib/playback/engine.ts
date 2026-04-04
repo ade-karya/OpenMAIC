@@ -661,15 +661,10 @@ export class PlaybackEngine {
       // No usable voice configured — detect text language so the browser
       // auto-selects an appropriate voice.
       const cjkRatio =
-<<<<<<< HEAD
-        (chunkText.match(/[\u4e00-\u9fff\u3400-\u4dbf]/g) || []).length / chunkText.length;
-      utterance.lang = cjkRatio > CJK_LANG_THRESHOLD ? 'zh-CN' : 'id-ID';
-=======
         chunkText.length > 0
           ? (chunkText.match(/[\u4e00-\u9fff\u3400-\u4dbf]/g) || []).length / chunkText.length
           : 0;
-      utterance.lang = cjkRatio > CJK_LANG_THRESHOLD ? 'zh-CN' : 'en-US';
->>>>>>> 412cd4537b2059c6cd46b106a4387ec82fab740f
+      utterance.lang = cjkRatio > CJK_LANG_THRESHOLD ? 'zh-CN' : 'id-ID';
     }
 
     utterance.onend = () => {

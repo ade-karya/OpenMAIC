@@ -75,3 +75,4 @@ tsconfig.json
 build_output.log
 tsconfig.json
 build_log.txt
+build_error.log

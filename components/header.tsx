@@ -27,11 +27,13 @@ interface HeaderProps {
 }
 
 export function Header({ currentSceneTitle }: HeaderProps) {
-  const { t } = useI18n();
+  const { t, locale, setLocale } = useI18n();
   const { theme, setTheme } = useTheme();
   const router = useRouter();
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [themeOpen, setThemeOpen] = useState(false);
+  const [languageOpen, setLanguageOpen] = useState(false);
+  const languageRef = useRef<HTMLDivElement>(null);
 
   // Export
   const { exporting: isExporting, exportPPTX, exportResourcePack } = useExportPPTX();
@@ -59,16 +61,19 @@ export function Header({ currentSceneTitle }: HeaderProps) {
       if (exportMenuOpen && exportRef.current && !exportRef.current.contains(e.target as Node)) {
         setExportMenuOpen(false);
       }
+      if (languageOpen && languageRef.current && !languageRef.current.contains(e.target as Node)) {
+        setLanguageOpen(false);
+      }
     },
-    [themeOpen, exportMenuOpen],
+    [themeOpen, exportMenuOpen, languageOpen],
   );
 
   useEffect(() => {
-    if (themeOpen || exportMenuOpen) {
+    if (themeOpen || exportMenuOpen || languageOpen) {
       document.addEventListener('mousedown', handleClickOutside);
       return () => document.removeEventListener('mousedown', handleClickOutside);
     }
-  }, [themeOpen, exportMenuOpen, handleClickOutside]);
+  }, [themeOpen, exportMenuOpen, languageOpen, handleClickOutside]);
 
   return (
     <>

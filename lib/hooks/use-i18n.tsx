@@ -5,7 +5,7 @@ import { useTranslation } from 'react-i18next';
 import { type Locale, defaultLocale, supportedLocales } from '@/lib/i18n';
 import '@/lib/i18n/config';
 
-const LOCALE_STORAGE_KEY = 'locale';
+
 
 /** Match a browser language code (e.g. 'en', 'zh-TW') to a supported locale */
 function resolveLocale(lang: string): Locale {
@@ -41,12 +41,12 @@ export function I18nProvider({ children }: { children: ReactNode }) {
     try {
       const stored = localStorage.getItem(LOCALE_STORAGE_KEY);
       if (stored && VALID_LOCALES.includes(stored as Locale)) {
-        setLocaleState(stored as Locale);
+        i18n.changeLanguage(stored as Locale);
         return;
       }
       const detected = navigator.language?.startsWith('id') ? 'id-ID' : navigator.language?.startsWith('ar') ? 'ar-SA' : navigator.language?.startsWith('en') ? 'en-US' : 'id-ID';
       localStorage.setItem(LOCALE_STORAGE_KEY, detected);
-      setLocaleState(detected);
+      i18n.changeLanguage(detected);
     } catch {
       // localStorage unavailable, keep default
     }
