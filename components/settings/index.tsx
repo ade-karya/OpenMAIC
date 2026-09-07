@@ -28,6 +28,7 @@ import {
   Mic,
   Plus,
   CreditCard,
+  Sparkles,
 } from 'lucide-react';
 import { useI18n } from '@/lib/hooks/use-i18n';
 import { useSettingsStore } from '@/lib/store/settings';
@@ -36,6 +37,7 @@ import { type ProviderId } from '@/lib/ai/providers';
 import { PROVIDERS, MONO_LOGO_PROVIDERS } from '@/lib/ai/providers';
 import { cn } from '@/lib/utils';
 import { createCustomProviderSettings, getProviderTypeLabel, modelInfoFromId } from './utils';
+import type { ProbedModelDetails } from './utils';
 import { ProviderList } from './provider-list';
 import { ProviderConfigPanel } from './provider-config-panel';
 import { PDFSettings } from './pdf-settings';
@@ -57,6 +59,7 @@ import { WebSearchSettings } from './web-search-settings';
 import { WEB_SEARCH_PROVIDERS, getWebSearchProviderDisplayName } from '@/lib/web-search/constants';
 import type { WebSearchProviderId } from '@/lib/web-search/types';
 import { GeneralSettings } from './general-settings';
+import { SkillSettings } from './skill-settings';
 import { TokenPlanSettings } from './token-plan-settings';
 import { ModelEditDialog } from './model-edit-dialog';
 import { AddProviderDialog, type NewProviderData } from './add-provider-dialog';
@@ -179,7 +182,6 @@ const VIDEO_PROVIDER_NAMES: Record<VideoProviderId, string> = {
   seedance: 'providerSeedance',
   kling: 'providerKling',
   veo: 'providerVeo',
-  sora: 'providerSora',
   'minimax-video': 'providerMiniMaxVideo',
   'grok-video': 'providerGrokVideo',
   happyhorse: 'providerHappyHorse',
@@ -189,7 +191,6 @@ const VIDEO_PROVIDER_ICONS: Record<VideoProviderId, string> = {
   seedance: '/logos/doubao.svg',
   kling: '/logos/kling.svg',
   veo: '/logos/gemini.svg',
-  sora: '/logos/openai.svg',
   'minimax-video': '/logos/minimax.svg',
   'grok-video': '/logos/grok.svg',
   happyhorse: '/logos/qwen.svg',
@@ -400,19 +401,34 @@ export function SettingsDialog({ open, onOpenChange, initialSection }: SettingsD
     setProviderConfig(pid, { models: newModels });
   };
 
-  // Merge probed model ids into the provider's model list. Previously
+  // Merge probed models into the provider's model list. Previously
   // probe-derived entries (`source: 'probed'`) are dropped first so a re-fetch
   // (after the user changes base URL / API key) REPLACES the stale set instead
   // of accumulating dead ids. Catalog and manually-added models are preserved.
-  // `modelInfoFromId(id, pid)` keeps built-in thinking capability so the
-  // thinking control isn't silently hidden for fetched built-in models.
-  const handleModelsFetched = (pid: ProviderId, fetchedIds: string[]): number => {
+  // `modelInfoFromId(id, pid, details)` keeps built-in thinking capability (and
+  // for Gemini, guarantees a thinking-*level* control plus token limits; for
+  // OpenRouter, builds an effort control from the probe's `reasoning`
+  // descriptor) so the thinking control isn't silently hidden for fetched models.
+  const handleModelsFetched = (
+    pid: ProviderId,
+    fetched: Array<{ id: string } & ProbedModelDetails>,
+  ): number => {
     const currentModels = providersConfig[pid]?.models || [];
     const kept = currentModels.filter((m) => m.source !== 'probed');
     const keptIds = new Set(kept.map((m) => m.id));
-    const additions = fetchedIds
-      .filter((id) => !keptIds.has(id))
-      .map((id) => ({ ...modelInfoFromId(id, pid), source: 'probed' as const }));
+    const additions = fetched
+      .filter((m) => m?.id && !keptIds.has(m.id))
+      .map((m) => ({
+        ...modelInfoFromId(m.id, pid, {
+          displayName: m.displayName,
+          thinking: m.thinking,
+          inputTokenLimit: m.inputTokenLimit,
+          outputTokenLimit: m.outputTokenLimit,
+          contextLength: m.contextLength,
+          reasoning: m.reasoning,
+        }),
+        source: 'probed' as const,
+      }));
     const next = [...kept, ...additions];
     // Write when the set changed at all — additions, or stale probed ids pruned.
     if (additions.length > 0 || next.length !== currentModels.length) {
@@ -553,6 +569,13 @@ export function SettingsDialog({ open, onOpenChange, initialSection }: SettingsD
     switch (activeSection) {
       case 'general':
         return <h2 className="text-lg font-semibold">{t('settings.systemSettings')}</h2>;
+      case 'skills':
+        return (
+          <>
+            <Sparkles className="h-6 w-6 text-muted-foreground" />
+            <h2 className="text-lg font-semibold">{t('settings.skills.title')}</h2>
+          </>
+        );
       case 'token-plan':
         return <h2 className="text-lg font-semibold">{t('settings.tokenPlan.nav')}</h2>;
       case 'providers':
@@ -837,6 +860,19 @@ export function SettingsDialog({ open, onOpenChange, initialSection }: SettingsD
             </button>
 
             <button
+              onClick={() => setActiveSection('skills')}
+              className={cn(
+                'w-full flex items-center gap-3 px-3 py-2 text-sm rounded-lg transition-colors text-left min-w-0',
+                activeSection === 'skills'
+                  ? 'bg-primary/10 text-primary font-medium'
+                  : 'hover:bg-muted',
+              )}
+            >
+              <Sparkles className="h-4 w-4 shrink-0" />
+              <span className="truncate">{t('settings.skills.nav')}</span>
+            </button>
+
+            <button
               onClick={() => setActiveSection('general')}
               className={cn(
                 'w-full flex items-center gap-3 px-3 py-2 text-sm rounded-lg transition-colors text-left min-w-0',
@@ -1056,6 +1092,8 @@ export function SettingsDialog({ open, onOpenChange, initialSection }: SettingsD
             {/* Content */}
             <div className="flex-1 overflow-y-auto p-5">
               {activeSection === 'general' && <GeneralSettings />}
+
+              {activeSection === 'skills' && <SkillSettings />}
 
               {activeSection === 'token-plan' && <TokenPlanSettings />}
 

@@ -1,5 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 
+import { isAgentRuntimeConfigured, isProWorkbenchEnabled } from '@/lib/config/feature-flags';
+
 /** Convert string to Uint8Array */
 function encode(str: string): Uint8Array {
   return new TextEncoder().encode(str);
@@ -12,7 +14,7 @@ function bufToHex(buf: ArrayBuffer): string {
     .join('');
 }
 
-/** Verify an HMAC-signed token using Web Crypto API (Edge-compatible) */
+/** Verify an HMAC-signed token using Web Crypto API */
 async function verifyToken(token: string, accessCode: string): Promise<boolean> {
   const dotIndex = token.indexOf('.');
   if (dotIndex === -1) return false;
@@ -42,12 +44,20 @@ async function verifyToken(token: string, accessCode: string): Promise<boolean> 
 }
 
 export async function proxy(request: NextRequest) {
+  const { pathname } = request.nextUrl;
+
+  // Return an actual server-side 404 when either half of the workbench is off.
+  // The proxy runs on the Node.js runtime (Next 16), so both the public flag
+  // and the server runtime/database gate are enforced here, matching startup.
+  const workbenchEnabled = isProWorkbenchEnabled() && isAgentRuntimeConfigured();
+  if (!workbenchEnabled && (pathname === '/workbench' || pathname.startsWith('/workbench/'))) {
+    return new NextResponse('Not found', { status: 404 });
+  }
+
   const accessCode = process.env.ACCESS_CODE;
   if (!accessCode) {
     return NextResponse.next();
   }
-
-  const { pathname } = request.nextUrl;
 
   // Whitelist: access-code endpoints, health check
   if (pathname.startsWith('/api/access-code/') || pathname === '/api/health') {

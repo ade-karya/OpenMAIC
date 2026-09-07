@@ -22,6 +22,7 @@ import {
 import { ElementOrderCommands, ElementAlignCommands } from '@/lib/types/edit';
 import { useCanvasOperations } from '@/lib/hooks/use-canvas-operations';
 import { useI18n } from '@/lib/hooks/use-i18n';
+import { editableElementDomId, maicElementIdAttributes } from '../../element-dom';
 
 export interface ContextmenuItem {
   text?: string;
@@ -219,7 +220,8 @@ export function EditableElement({
   if (!CurrentElementComponent) {
     return (
       <div
-        id={`editable-element-${elementInfo.id}`}
+        id={editableElementDomId(elementInfo.id)}
+        {...maicElementIdAttributes(elementInfo.id)}
         className="editable-element absolute"
         style={{
           zIndex: elementIndex,
@@ -237,7 +239,8 @@ export function EditableElement({
 
   return (
     <div
-      id={`editable-element-${elementInfo.id}`}
+      id={editableElementDomId(elementInfo.id)}
+      {...maicElementIdAttributes(elementInfo.id)}
       className="editable-element absolute"
       style={{
         zIndex: elementIndex,

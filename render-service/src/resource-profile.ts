@@ -15,6 +15,11 @@ export interface ResourceProfile {
   producerWorkers: 1;
   maxConcurrency: 1;
   maxConcurrentExtractions: 1;
+  maxPreviewPixels: number;
+  maxPreviewDeviceScaleFactor: number;
+  /** Hard local chunk fan-out limits for the selected memory/CPU profile. */
+  maxChunkWorkers: number;
+  maxParallelChunks: number;
   minimumMemoryBytes: number;
 }
 
@@ -28,6 +33,7 @@ function defineProfile(
   name: ResourceProfileName,
   capturePolicy: CapturePolicy,
   minimumMemoryBytes: number,
+  maxParallelChunks: number,
 ): ResourceProfile {
   const requestedCaptureMode = capturePolicy === 'screenshot-only' ? 'screenshot' : 'beginframe';
   return {
@@ -38,13 +44,17 @@ function defineProfile(
     // screenshot for compatibility-sensitive compositions such as iframe GenUI.
     requireBeginFrame: false,
     ...COMMON_LIMITS,
+    maxPreviewPixels: name === 'low-memory' ? 1920 * 1080 : 3840 * 2160,
+    maxPreviewDeviceScaleFactor: name === 'low-memory' ? 1 : 2,
     minimumMemoryBytes,
+    maxChunkWorkers: 1,
+    maxParallelChunks,
   };
 }
 
 const PROFILES: Record<ResourceProfileName, ResourceProfile> = {
-  standard: defineProfile('standard', 'prefer-beginframe', 8 * GIB),
-  'low-memory': defineProfile('low-memory', 'screenshot-only', 4 * GIB),
+  standard: defineProfile('standard', 'prefer-beginframe', 8 * GIB, 4),
+  'low-memory': defineProfile('low-memory', 'screenshot-only', 4 * GIB, 1),
 };
 
 function requiredProducerEnvironment(profile: ResourceProfile): Record<string, string> {
@@ -164,6 +174,10 @@ export function publicResourceProfile(profile: ResourceProfile) {
     producerWorkers: profile.producerWorkers,
     maxConcurrency: profile.maxConcurrency,
     maxConcurrentExtractions: profile.maxConcurrentExtractions,
+    maxPreviewPixels: profile.maxPreviewPixels,
+    maxPreviewDeviceScaleFactor: profile.maxPreviewDeviceScaleFactor,
+    maxChunkWorkers: profile.maxChunkWorkers,
+    maxParallelChunks: profile.maxParallelChunks,
     minimumMemoryMiB: profile.minimumMemoryBytes / 1024 ** 2,
   } as const;
 }

@@ -941,6 +941,22 @@ export const PROVIDERS: Record<ProviderId, ProviderConfig> = {
           },
         },
       },
+      {
+        id: 'deepseek-v4-flash-vision-exp',
+        name: 'DeepSeek V4 Flash Vision (Exp)',
+        contextWindow: 1048576,
+        outputWindow: 393216,
+        capabilities: {
+          streaming: true,
+          tools: true,
+          vision: true,
+          thinking: {
+            toggleable: true,
+            budgetAdjustable: true,
+            defaultEnabled: true,
+          },
+        },
+      },
     ],
   },
 
@@ -1617,6 +1633,17 @@ function getCompatThinkingBodyParams(
   modelId: string,
   config: ThinkingConfig,
 ): Record<string, unknown> | undefined {
+  // This model is served through an OpenAI-compatible gateway even when the
+  // deployment uses the `openai` provider slot. The gateway's chat template
+  // toggle is neither OpenAI's `reasoning_effort` nor DeepSeek's native
+  // `thinking` object: it requires this exact vLLM template argument.
+  if (providerId === 'openai' && modelId === 'deepseek-v4-flash-vision-exp') {
+    const mode = getThinkingMode(config);
+    return mode === undefined
+      ? undefined
+      : { chat_template_kwargs: { thinking: mode === 'enabled' } };
+  }
+
   const capability = getCatalogThinkingCapability(providerId, modelId);
   if (!capability || capability.control === 'none') return undefined;
 
@@ -1706,11 +1733,23 @@ function getCompatThinkingBodyParams(
     }
 
     case 'openrouter': {
+      // Unified `reasoning` object per
+      // https://openrouter.ai/docs/guides/best-practices/reasoning-tokens:
+      // `effort` is translated by the gateway for both effort-native models
+      // (OpenAI, Grok) and `max_tokens`-native models (Anthropic, Gemini
+      // thinking, Qwen), so it is always preferred over `max_tokens` — the
+      // two must not be sent together. `effort: "none"` disables reasoning;
+      // mandatory models never list it, so it can never be sent to them.
       const reasoning: Record<string, unknown> = {};
-      if (mode === 'disabled') reasoning.enabled = false;
+      const allowed = capability.effortValues;
+      const requested =
+        config.effort && allowed?.includes(config.effort) ? config.effort : undefined;
+      const effort =
+        requested ?? (mode === 'enabled' ? capability.defaultEffort : undefined);
+      if (effort) reasoning.effort = effort;
+      if (mode === 'disabled' && !effort) reasoning.enabled = false;
       if (mode === 'enabled') reasoning.enabled = true;
-      if (config.effort) reasoning.effort = config.effort;
-      if (budget !== undefined) reasoning.max_tokens = budget;
+      if (budget !== undefined && budget > 0) reasoning.max_tokens = budget;
       if (typeof config.excludeReasoningOutput === 'boolean') {
         reasoning.exclude = config.excludeReasoningOutput;
       }
@@ -1886,20 +1925,21 @@ function openAIStreamErrorStatus(error: Record<string, unknown>): number {
 async function fetchCustomOpenAIChat(
   input: RequestInfo | URL,
   init?: RequestInit,
+  fetchImpl: typeof fetch = (fetchInput, fetchInit) => globalThis.fetch(fetchInput, fetchInit),
 ): Promise<Response> {
   const requestUrl = requestUrlString(input);
   if (!requestUrl.includes('/chat/completions') || !init?.body || typeof init.body !== 'string') {
-    return globalThis.fetch(input, init);
+    return fetchImpl(input, init);
   }
 
   let requestBody: Record<string, unknown>;
   try {
     requestBody = JSON.parse(init.body) as Record<string, unknown>;
   } catch {
-    return globalThis.fetch(input, init);
+    return fetchImpl(input, init);
   }
 
-  if (requestBody.stream === true) return globalThis.fetch(input, init);
+  if (requestBody.stream === true) return fetchImpl(input, init);
 
   const streamOptions =
     requestBody.stream_options &&
@@ -1908,7 +1948,7 @@ async function fetchCustomOpenAIChat(
       ? (requestBody.stream_options as Record<string, unknown>)
       : {};
 
-  const response = await globalThis.fetch(input, {
+  const response = await fetchImpl(input, {
     ...init,
     body: JSON.stringify({
       ...requestBody,
@@ -2067,14 +2107,23 @@ export function getModel(config: ModelConfig): ModelWithInfo {
     config.baseUrl || provider?.defaultBaseUrl || undefined,
   );
 
+  // The outbound transport. resolveModel installs a redirect-validating fetch
+  // here so every hop of a request to a client-supplied base URL is re-checked;
+  // without one, requests go through the global fetch exactly as before
+  // (resolved at call time, so tests that stub it keep working).
+  const transportFetch: typeof fetch =
+    config.fetchImpl ?? ((fetchInput, fetchInit) => globalThis.fetch(fetchInput, fetchInit));
+
   let model: LanguageModel;
 
   switch (providerType) {
     case 'azure': {
-      const azure = createAzure({
+      const azureOptions: Parameters<typeof createAzure>[0] = {
         apiKey: effectiveApiKey,
         baseURL: normalizeAzureBaseUrl(effectiveBaseUrl),
-      });
+      };
+      if (config.fetchImpl) azureOptions.fetch = config.fetchImpl;
+      const azure = createAzure(azureOptions);
       model = azure(config.modelId);
       break;
     }
@@ -2090,15 +2139,16 @@ export function getModel(config: ModelConfig): ModelWithInfo {
         name: config.providerId,
       };
 
-      if (useStreamingChatCompat) {
-        openaiOptions.fetch = fetchCustomOpenAIChat as typeof globalThis.fetch;
-      }
-
-      // For OpenAI-compatible providers (not native OpenAI), add a fetch
-      // wrapper that injects vendor-specific thinking params into the HTTP
-      // body. The thinking config is read from AsyncLocalStorage, set by
-      // callLLM / streamLLM at call time.
-      if (config.providerId !== 'openai') {
+      // A custom base URL makes the `openai` slot an OpenAI-compatible gateway,
+      // not the native OpenAI service. Give it the same request/response seam
+      // as named compatible providers: inject the gateway's thinking control
+      // and recover reasoning_content before the SDK schema can discard it.
+      const usesOpenAIResponses =
+        !useStreamingChatCompat && shouldUseOpenAIResponsesApi(config.providerId, config.modelId);
+      const usesCompatTransport =
+        config.providerId !== 'openai' ||
+        (usesCustomOpenAIBaseUrl(config.baseUrl) && !usesOpenAIResponses);
+      if (usesCompatTransport) {
         const providerId = config.providerId;
         const compatFetch = async (url: RequestInfo | URL, init?: RequestInit) => {
           // Read thinking config from globalThis (set by thinking-context.ts)
@@ -2141,7 +2191,9 @@ export function getModel(config: ModelConfig): ModelWithInfo {
               /* leave body as-is */
             }
           }
-          const response = await globalThis.fetch(url, init);
+          const response = useStreamingChatCompat
+            ? await fetchCustomOpenAIChat(url, init, transportFetch)
+            : await transportFetch(url, init);
 
           // Recover reasoning that @ai-sdk/openai's chat schema drops: rewrite
           // streamed `reasoning_content` deltas into an inline <think> block
@@ -2199,20 +2251,21 @@ export function getModel(config: ModelConfig): ModelWithInfo {
           return response;
         };
         openaiOptions.fetch = compatFetch as typeof globalThis.fetch;
+      } else if (config.fetchImpl) {
+        // Native OpenAI / Responses transport with a validated fetch installed
+        // by the server: still route requests through it.
+        openaiOptions.fetch = config.fetchImpl;
       }
 
       const openai = createOpenAI(openaiOptions);
-      model =
-        !useStreamingChatCompat && shouldUseOpenAIResponsesApi(config.providerId, config.modelId)
-          ? openai.responses(config.modelId)
-          : openai.chat(config.modelId);
-      // OpenAI-compatible providers (e.g. DeepSeek, Qwen) stream reasoning
+      model = usesOpenAIResponses ? openai.responses(config.modelId) : openai.chat(config.modelId);
+      // OpenAI-compatible providers (e.g. DeepSeek, Qwen), including a custom
+      // gateway configured through the `openai` slot, stream reasoning
       // either as a separate `reasoning_content` field (normalized to an inline
       // <think> block by compatFetch) or as native inline <think>.
       // Split it into first-class reasoning parts so the agent stream and UI can
-      // show a thinking panel and the answer text stays clean. Native OpenAI
-      // handles reasoning itself, so it is excluded.
-      if (config.providerId !== 'openai') {
+      // show a thinking panel and the answer text stays clean.
+      if (usesCompatTransport) {
         const middleware =
           config.providerId === 'kimi' && config.modelId === 'kimi-k3'
             ? [
@@ -2261,8 +2314,10 @@ export function getModel(config: ModelConfig): ModelWithInfo {
             }
           }
 
-          return globalThis.fetch(url, init);
+          return transportFetch(url, init);
         }) as typeof globalThis.fetch;
+      } else if (config.fetchImpl) {
+        anthropicOptions.fetch = config.fetchImpl;
       }
 
       const anthropic = createAnthropic(anthropicOptions);
@@ -2306,6 +2361,8 @@ export function getModel(config: ModelConfig): ModelWithInfo {
           });
           return response as Response;
         }) as typeof fetch;
+      } else if (config.fetchImpl) {
+        googleOptions.fetch = config.fetchImpl;
       }
       const google = createGoogleGenerativeAI(googleOptions);
       model = google.chat(config.modelId);
@@ -2320,6 +2377,33 @@ export function getModel(config: ModelConfig): ModelWithInfo {
   const modelInfo = findModelById(config.providerId, provider?.models, config.modelId) ?? null;
 
   return { model, modelInfo };
+}
+
+/**
+ * Deprecation notice for bare model ids (no `provider:` prefix). parseModelString
+ * keeps defaulting them to `openai` for backward compatibility, but that fallback
+ * is deprecated: configs should write `provider:model` explicitly. Emitted only
+ * by the boot-time config validation for config-derived sites — never for
+ * request-derived strings, which would let clients drive log volume.
+ */
+export const BARE_MODEL_ID_DEPRECATION_MSG =
+  'bare model ids default to openai for backward compatibility; this fallback is deprecated — write provider:model';
+
+/** Bare model ids already surfaced, so the deprecation fires once per unique id. */
+const warnedBareModelIds = new Set<string>();
+
+/**
+ * Warn once per unique bare model id. `where` names the config site (e.g.
+ * `DEFAULT_MODEL` or a MODEL_ROUTES stage). Callers must pass only
+ * config-derived ids (the config surface is finite, so the dedupe set is
+ * bounded); request-derived strings must never reach this function.
+ */
+export function warnBareModelIdDeprecation(bareModelId: string, where?: string): boolean {
+  if (warnedBareModelIds.has(bareModelId)) return false;
+  warnedBareModelIds.add(bareModelId);
+  const context = where ? `${where}: ` : '';
+  console.warn(`[config] ${context}${BARE_MODEL_ID_DEPRECATION_MSG} (bare id "${bareModelId}")`);
+  return true;
 }
 
 /**
@@ -2339,7 +2423,10 @@ export function parseModelString(modelString: string): {
     };
   }
 
-  // Default to OpenAI for backward compatibility
+  // Default to OpenAI for backward compatibility (deprecated; boot-time config
+  // validation warns for config-derived bare ids). Deliberately no warning
+  // here: this path is reachable with request-controlled strings, which must
+  // not drive logging or dedupe-set growth.
   return {
     providerId: 'openai',
     modelId: modelString,

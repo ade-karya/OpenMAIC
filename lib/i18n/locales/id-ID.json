@@ -219,13 +219,6 @@
       "interactive": "Interaktif",
       "pbl": "PBL"
     },
-    "multiTab": {
-      "conflict": {
-        "title": "Tab lain sedang mengedit kursus ini",
-        "body": "Pengeditan dikunci pada satu tab untuk menghindari konflik perubahan. Tutup tab lain (atau tunggu hingga sesinya berakhir) sebelum masuk ke mode edit di sini.",
-        "actionDismiss": "Paham"
-      }
-    },
     "text": {
       "label": "Teks",
       "font": "Fon",

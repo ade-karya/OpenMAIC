@@ -15,6 +15,9 @@ import { createLogger } from '@/lib/logger';
 import { MediaStageProvider } from '@/lib/contexts/media-stage-context';
 import { generateMediaForOutlines } from '@/lib/media/media-orchestrator';
 import { useAgentRegistry } from '@/lib/orchestration/registry/store';
+import { fetchStageMeta } from '@/lib/classroom/stage-meta-client';
+import { noteStageOwnership } from '@/lib/classroom/stage-ownership-signal';
+import { isStageDeleted } from '@/lib/utils/deleted-stages';
 import {
   applyClassroomStageAndScenes,
   defaultClassroomLoadDeps,
@@ -29,7 +32,17 @@ export default function ClassroomDetailPage() {
 
   const { loadFromStorage } = useStageStore();
 
-  const [loading, setLoading] = useState(true);
+  // Warm fast-path: the store may already hold this classroom (SPA navigation,
+  // remount, Back). Start painted instead of flashing "Loading classroom..."
+  // while IndexedDB/media revalidate in the background.
+  const [loading, setLoading] = useState(() => {
+    const s = useStageStore.getState();
+    return !(
+      s.stage?.id === classroomId &&
+      s.scenes.length > 0 &&
+      !isStageDeleted(classroomId)
+    );
+  });
   const [error, setError] = useState<string | null>(null);
 
   const generationStartedRef = useRef(false);
@@ -59,7 +72,8 @@ export default function ClassroomDetailPage() {
             applyStageAndScenes: applyClassroomStageAndScenes,
           }),
         loadRestoredMediaTasks: defaultClassroomLoadDeps.loadRestoredMediaTasks,
-        applyRestoredMediaTasks: defaultClassroomLoadDeps.applyRestoredMediaTasks,
+        applyRestoredMediaTasks: (restored) =>
+          defaultClassroomLoadDeps.applyRestoredMediaTasks(restored, isCurrent),
         discardRestoredMediaTasks: defaultClassroomLoadDeps.discardRestoredMediaTasks,
         loadLegacyAgentFallbacks: defaultClassroomLoadDeps.loadLegacyAgentFallbacks,
         commitMigratedAgentConfigs: defaultClassroomLoadDeps.commitMigratedAgentConfigs,
@@ -69,17 +83,60 @@ export default function ClassroomDetailPage() {
         restoreAgentSelection: defaultClassroomLoadDeps.restoreAgentSelection,
         setError,
         setLoading,
+        // Document-first paint: drop the spinner as soon as stage+scenes land,
+        // media/roster continue in the background (see load-classroom.ts).
+        onDocumentReady: () => {
+          if (isCurrent()) setLoading(false);
+        },
         log,
       });
+
+      // The stage-meta sidecar resolves the viewer-facing ownership facts the
+      // document seam does not carry — `isOwner` decides read-only vs editable
+      // (see `stage-meta-client.ts`). Run it strictly AFTER the load applied
+      // its defaults so its answer wins, and fire it without blocking the
+      // render that already happened.
+      if (isEffectCurrent()) {
+        void fetchStageMeta(classroomId)
+          .then((result) => {
+            if (!isEffectCurrent()) return;
+            if (result.outcome === 'found') {
+              noteStageOwnership(classroomId, true, {
+                isOwner: result.meta.isOwner,
+              });
+              useStageStore.getState().setViewerAccess({
+                isOwner: result.meta.isOwner,
+              });
+            } else if (result.outcome === 'unavailable') {
+              // A silent sidecar is not "this is a stranger's course": record
+              // the outage so nothing treats `isOwner === false` as a visitor
+              // conclusion. The edit gate stays on the upstream defaults.
+              noteStageOwnership(classroomId, false, null);
+            } else {
+              // 'absent' — no sidecar row for this id. This classroom also
+              // serves local-only courses, so the upstream editable default
+              // stays; the server's owner-scoped writes remain the authority.
+              noteStageOwnership(classroomId, true, null);
+            }
+          })
+          .catch(() => noteStageOwnership(classroomId, false, null));
+      }
     },
     [classroomId, loadFromStorage],
   );
 
   useEffect(() => {
-    // Reset loading state on course switch to unmount Stage during transition,
-    // preventing stale data from syncing back to the new course
+    // Only unmount Stage + clear per-classroom caches on an actual switch.
+    // A remount of the SAME classroom keeps its warm store/tasks visible while
+    // the load revalidates in the background (stale-while-revalidate).
+    const isWarm = (() => {
+      const s = useStageStore.getState();
+      return (
+        s.stage?.id === classroomId && s.scenes.length > 0 && !isStageDeleted(classroomId)
+      );
+    })();
     /* eslint-disable react-hooks/set-state-in-effect -- Course switch must hide stale Stage before async load */
-    setLoading(true);
+    if (!isWarm) setLoading(true);
     setError(null);
     /* eslint-enable react-hooks/set-state-in-effect */
     generationStartedRef.current = false;
@@ -87,12 +144,15 @@ export default function ClassroomDetailPage() {
     // Clear previous classroom's media tasks to prevent cross-classroom contamination.
     // Placeholder IDs (gen_img_1, gen_vid_1) are NOT globally unique across stages,
     // so stale tasks from a previous classroom would shadow the new one's.
-    const mediaStore = useMediaGenerationStore.getState();
-    mediaStore.revokeObjectUrls();
-    useMediaGenerationStore.setState({ tasks: {} });
+    // Skipped for a warm remount of the same classroom to avoid flashing media away.
+    if (!isWarm) {
+      const mediaStore = useMediaGenerationStore.getState();
+      mediaStore.revokeObjectUrls();
+      useMediaGenerationStore.setState({ tasks: {} });
 
-    // Clear whiteboard history to prevent snapshots from a previous course leaking in.
-    useWhiteboardHistoryStore.getState().clearHistory();
+      // Clear whiteboard history to prevent snapshots from a previous course leaking in.
+      useWhiteboardHistoryStore.getState().clearHistory();
+    }
 
     let cancelled = false;
     loadClassroom(() => !cancelled);
@@ -125,12 +185,18 @@ export default function ClassroomDetailPage() {
       const genParamsStr = sessionStorage.getItem('generationParams');
       const params = genParamsStr ? JSON.parse(genParamsStr) : {};
 
-      // Reconstruct imageMapping from IndexedDB using pdfImages storageIds
-      const storageIds = (params.pdfImages || [])
-        .map((img: { storageId?: string }) => img.storageId)
-        .filter(Boolean);
-
-      loadImageMapping(storageIds).then((imageMapping) => {
+      // Reconstruct imageMapping for the resumed generation. A server-backed
+      // deployment stored allocated asset ids on the session's pdfImages (RFC
+      // #1153 part 2 B): the extracted images are pool assets, so generation
+      // is fed by id and the routes resolve the bytes server-side. Per source
+      // (N4) the mapping may MIX allocated asset ids and IndexedDB data URLs —
+      // a source whose cache write failed materialized its own images — so the
+      // resume mapping merges both, instead of choosing one transport for the
+      // whole set and silently dropping the other half.
+      const pdfImages = (params.pdfImages || []) as Array<
+        { id: string; assetId?: string; storageId?: string } & Record<string, unknown>
+      >;
+      const finishResume = (imageMapping: Record<string, string>) =>
         generateRemaining({
           pdfImages: params.pdfImages,
           imageMapping,
@@ -143,7 +209,20 @@ export default function ClassroomDetailPage() {
           userProfile: params.userProfile,
           languageDirective: params.languageDirective || stage.languageDirective,
         });
-      });
+
+      const imageMapping: Record<string, string> = {};
+      for (const img of pdfImages) {
+        if (img.assetId) imageMapping[img.id] = img.assetId;
+      }
+      const storageIds = pdfImages
+        .filter((img) => !img.assetId && img.storageId)
+        .map((img) => img.storageId as string);
+      void (async () => {
+        if (storageIds.length > 0) {
+          Object.assign(imageMapping, await loadImageMapping(storageIds));
+        }
+        finishResume(imageMapping);
+      })();
     } else if (outlines.length > 0 && stage) {
       // All scenes are generated, but some media may not have finished.
       // Resume media generation for any tasks not yet in IndexedDB.

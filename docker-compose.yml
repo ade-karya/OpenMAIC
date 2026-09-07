@@ -3,6 +3,8 @@ services:
     build:
       context: .
       args:
+        - ALPINE_MIRROR=${ALPINE_MIRROR:-}
+        - NPM_REGISTRY=${NPM_REGISTRY:-}
         # NEXT_PUBLIC_* values are compiled into the browser bundle. Leave them
         # empty unless the corresponding client feature is explicitly enabled;
         # persistence and other build-time flags can be supplied on the command line.
@@ -91,6 +93,12 @@ services:
       # producer worker, one render, and one extraction. Select low-memory to
       # force screenshot instead of relying on producer auto-selection.
       - RENDER_RESOURCE_PROFILE=${RENDER_RESOURCE_PROFILE:-standard}
+      - RENDER_CHUNK_EXECUTION=${RENDER_CHUNK_EXECUTION:-false}
+      - RENDER_CHUNK_COUNT=${RENDER_CHUNK_COUNT:-1}
+      - RENDER_CHUNK_WORKERS=${RENDER_CHUNK_WORKERS:-1}
+      - RENDER_MAX_PARALLEL_CHUNKS=${RENDER_MAX_PARALLEL_CHUNKS:-1}
+      - RENDER_CHUNK_SIZE_FRAMES=${RENDER_CHUNK_SIZE_FRAMES:-0}
+      - RENDER_TARGET_CHUNK_FRAMES=${RENDER_TARGET_CHUNK_FRAMES:-0}
       - PRODUCER_HEADLESS_SHELL_PATH=/usr/bin/chromium-headless-shell
       - RENDER_MAX_CONCURRENCY=1
       - RENDER_MAX_CONCURRENT_EXTRACTIONS=1
@@ -107,6 +115,12 @@ services:
       # RENDER_MAX_QUEUE cap. Set this >0 only with a trusted proxy supplying
       # per-user identity (see render-service/README.md).
       - RENDER_MAX_JOBS_PER_USER=0
+      - RENDER_PREVIEW_TIMEOUT_MS=${RENDER_PREVIEW_TIMEOUT_MS:-20000}
+      - RENDER_PREVIEW_MAX_IN_FLIGHT=${RENDER_PREVIEW_MAX_IN_FLIGHT:-8}
+      # Preview callers send a durable owner identity in x-openmaic-client, so
+      # keep this per-owner guard enabled. Set it to 0 only in deployments that
+      # call /preview without an owner identity.
+      - RENDER_PREVIEW_MAX_PER_USER=${RENDER_PREVIEW_MAX_PER_USER:-2}
     # Bound RAM: each render (Chromium + FFmpeg + archive expansion) is memory-heavy.
     # The standard profile requires 8 GiB. For the explicit low-memory profile,
     # set RENDER_RESOURCE_PROFILE=low-memory and RENDER_SERVICE_MEMORY_LIMIT=4g.

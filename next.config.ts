@@ -2,6 +2,16 @@ import type { NextConfig } from 'next';
 
 const nextConfig: NextConfig = {
   output: process.env.VERCEL ? undefined : 'standalone',
+  outputFileTracingIncludes: {
+    '/*': [
+      'lib/server/agent-runtime/import-pptx-worker.mjs',
+      'skills/openmaic/**',
+      'skills/agent-runtime/**',
+    ],
+  },
+  typescript: {
+    tsconfigPath: process.env.NODE_ENV === 'production' ? 'tsconfig.build.json' : 'tsconfig.json',
+  },
   transpilePackages: [
     'mathml2omml',
     'pptxgenjs',
